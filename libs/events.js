@@ -6,6 +6,7 @@ function events() {
 events.prototype.init = function () {
     this.events = {
         'battle': function (data, core, callback) {
+            core.autosave();
             core.battle(data.event.id, data.x, data.y);
             if (core.isset(callback))
                 callback();
@@ -16,6 +17,7 @@ events.prototype.init = function () {
                 callback();
         },
         'openDoor': function (data, core, callback) {
+            core.autosave();
             core.openDoor(data.event.id, data.x, data.y, true);
             if (core.isset(callback))
                 callback();
@@ -131,10 +133,18 @@ events.prototype.lose = function(reason) {
 
 ////// 转换楼层结束的事件 //////
 events.prototype.afterChangeFloor = function (floorId) {
-    if (!core.isset(core.status.event.id) && !core.hasFlag("visited_"+floorId)) {
-        this.doEvents(core.floors[floorId].firstArrive);
+    if (core.isset(core.status.event.id)) return; // 当前存在事件
+
+    if (!core.hasFlag("visited_"+floorId)) {
+        this.doEvents(core.floors[floorId].firstArrive, null, null, function () {
+            core.autosave();
+        });
         core.setFlag("visited_"+floorId, true);
+        return;
     }
+
+    // 自动存档
+    core.autosave();
 }
 
 ////// 开始执行一系列自定义事件 //////
@@ -696,6 +706,14 @@ events.prototype.afterLoadData = function(data) {
 /********** 点击事件、键盘事件 ************/
 /****************************************/
 
+////// 长按 //////
+events.prototype.longClick = function () {
+    core.waitHeroToStop(function () {
+        // 绘制快捷键
+        core.ui.drawKeyBoard();
+    });
+}
+
 ////// 按下Ctrl键时（快捷跳过对话） //////
 events.prototype.keyDownCtrl = function () {
     if (core.status.event.id=='text') {
@@ -1141,13 +1159,17 @@ events.prototype.keyUpToolbox = function (keycode) {
 
 ////// 存读档界面时的点击操作 //////
 events.prototype.clickSL = function(x,y) {
+
+    var index=core.status.event.data;
+    var page = parseInt(index/10), offset=index%10;
+
     // 上一页
     if ((x == 3 || x == 4) && y == 12) {
-        core.ui.drawSLPanel(core.status.event.data - 6);
+        core.ui.drawSLPanel(10*(page-1)+offset);
     }
     // 下一页
     if ((x == 8 || x == 9) && y == 12) {
-        core.ui.drawSLPanel(core.status.event.data + 6);
+        core.ui.drawSLPanel(10*(page+1)+offset);
     }
     // 返回
     if (x>=10 && x<=12 && y==12) {
@@ -1158,50 +1180,77 @@ events.prototype.clickSL = function(x,y) {
         return;
     }
 
-    var page=parseInt((core.status.event.data-1)/6);
     var index=6*page+1;
     if (y>=1 && y<=4) {
-        if (x>=1 && x<=3) core.doSL(index, core.status.event.id);
-        if (x>=5 && x<=7) core.doSL(index+1, core.status.event.id);
-        if (x>=9 && x<=11) core.doSL(index+2, core.status.event.id);
+        if (x>=1 && x<=3) core.doSL("autoSave", core.status.event.id);
+        if (x>=5 && x<=7) core.doSL(5*page+1, core.status.event.id);
+        if (x>=9 && x<=11) core.doSL(5*page+2, core.status.event.id);
     }
     if (y>=7 && y<=10) {
-        if (x>=1 && x<=3) core.doSL(index+3, core.status.event.id);
-        if (x>=5 && x<=7) core.doSL(index+4, core.status.event.id);
-        if (x>=9 && x<=11) core.doSL(index+5, core.status.event.id);
+        if (x>=1 && x<=3) core.doSL(5*page+3, core.status.event.id);
+        if (x>=5 && x<=7) core.doSL(5*page+4, core.status.event.id);
+        if (x>=9 && x<=11) core.doSL(5*page+5, core.status.event.id);
     }
 }
 
 ////// 存读档界面时，按下某个键的操作 //////
 events.prototype.keyDownSL = function(keycode) {
+
+    var index=core.status.event.data;
+    var page = parseInt(index/10), offset=index%10;
+
     if (keycode==37) { // left
-        core.ui.drawSLPanel(core.status.event.data - 1);
+        if (offset==0) {
+            core.ui.drawSLPanel(10*(page-1) + 5);
+        }
+        else {
+            core.ui.drawSLPanel(index - 1);
+        }
         return;
     }
     if (keycode==38) { // up
-        core.ui.drawSLPanel(core.status.event.data - 3);
+        if (offset<3) {
+            core.ui.drawSLPanel(10*(page-1) + offset + 3);
+        }
+        else {
+            core.ui.drawSLPanel(index - 3);
+        }
         return;
     }
     if (keycode==39) { // right
-        core.ui.drawSLPanel(core.status.event.data + 1);
+        if (offset==5) {
+            core.ui.drawSLPanel(10*(page+1));
+        }
+        else {
+            core.ui.drawSLPanel(index + 1);
+        }
         return;
     }
     if (keycode==40) { // down
-        core.ui.drawSLPanel(core.status.event.data + 3);
+        if (offset>=3) {
+            core.ui.drawSLPanel(10*(page+1) + offset - 3);
+        }
+        else {
+            core.ui.drawSLPanel(index + 3);
+        }
         return;
     }
     if (keycode==33) { // PAGEUP
-        core.ui.drawSLPanel(core.status.event.data - 6);
+        core.ui.drawSLPanel(10*(page+1) + offset);
         return;
     }
     if (keycode==34) { // PAGEDOWN
-        core.ui.drawSLPanel(core.status.event.data + 6);
+        core.ui.drawSLPanel(10*(page-1) + offset);
         return;
     }
 }
 
 ////// 存读档界面时，放开某个键的操作 //////
 events.prototype.keyUpSL = function (keycode) {
+
+    var index=core.status.event.data;
+    var page = parseInt(index/10), offset=index%10;
+
     if (keycode==27 || keycode==88 || (core.status.event.id == 'save' && keycode==83) || (core.status.event.id == 'load' && keycode==68)) {
         core.ui.closePanel();
         if (!core.isPlaying()) {
@@ -1210,7 +1259,12 @@ events.prototype.keyUpSL = function (keycode) {
         return;
     }
     if (keycode==13 || keycode==32 || keycode==67) {
-        core.doSL(core.status.event.data, core.status.event.id);
+        if (offset==0) {
+            core.doSL("autoSave", core.status.event.id);
+        }
+        else {
+            core.doSL(5*page+offset, core.status.event.id);
+        }
         return;
     }
 }
@@ -1449,6 +1503,65 @@ events.prototype.keyUpSyncSave = function (keycode) {
         var topIndex = 6 - parseInt((choices.length - 1) / 2);
         this.clickSyncSave(6, topIndex+core.status.event.selection);
     }
+}
+
+////// “虚拟键盘”界面时的点击操作 //////
+events.prototype.clickKeyBoard = function (x, y) {
+    if (y==3 && x>=1 && x<=11) {
+        core.ui.closePanel();
+        core.keyUp(112+x-1); // F1-F12: 112-122
+    }
+    if (y==4 && x>=1 && x<=10) {
+        core.ui.closePanel();
+        core.keyUp(x==10?48:48+x); // 1-9: 49-57; 0: 48
+    }
+    // 字母
+    var lines = [
+        ["Q","W","E","R","T","Y","U","I","O","P"],
+        ["A","S","D","F","G","H","J","K","L"],
+        ["Z","X","C","V","B","N","M"],
+    ];
+    if (y==5 && x>=1 && x<=10) {
+        core.ui.closePanel();
+        core.keyUp(lines[0][x-1].charCodeAt(0));
+    }
+    if (y==6 && x>=1 && x<=9) {
+        core.ui.closePanel();
+        core.keyUp(lines[1][x-1].charCodeAt(0));
+    }
+    if (y==7 && x>=1 && x<=7) {
+        core.ui.closePanel();
+        core.keyUp(lines[2][x-1].charCodeAt(0));
+    }
+    if (y==8 && x>=1 && x<=11) {
+        core.ui.closePanel();
+        if (x==1) core.keyUp(189); // -
+        if (x==2) core.keyUp(187); // =
+        if (x==3) core.keyUp(219); // [
+        if (x==4) core.keyUp(221); // ]
+        if (x==5) core.keyUp(220); // \
+        if (x==6) core.keyUp(186); // ;
+        if (x==7) core.keyUp(222); // '
+        if (x==8) core.keyUp(188); // ,
+        if (x==9) core.keyUp(190); // .
+        if (x==10) core.keyUp(191); // /
+        if (x==11) core.keyUp(192); // `
+    }
+    if (y==9 && x>=1 && x<=10) {
+        core.ui.closePanel();
+        if (x==1) core.keyUp(27); // ESC
+        if (x==2) core.keyUp(9); // TAB
+        if (x==3) core.keyUp(20); // CAPS
+        if (x==4) core.keyUp(16); // SHIFT
+        if (x==5) core.keyUp(17); // CTRL
+        if (x==6) core.keyUp(18); // ALT
+        if (x==7) core.keyUp(32); // SPACE
+        if (x==8) core.keyUp(8); // BACKSPACE
+        if (x==9) core.keyUp(13); // ENTER
+        if (x==10) core.keyUp(46); // DEL
+    }
+    if (y==10 && x>=9 && x<=11)
+        core.ui.closePanel();
 }
 
 ////// “关于”界面时的点击操作 //////
